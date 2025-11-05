@@ -15,6 +15,7 @@ export default function GroceriesPage() {
 
   const [groceries, setGroceries] = useState<GroceryItem[]>([])
   const supabase = createClient()
+  const [itemName, setItemName] = useState('')
 
   // 2. Fetch the data when the component loads
   useEffect(() => {
@@ -34,36 +35,55 @@ export default function GroceriesPage() {
     // // Get the current user session
     const { data: { user }, error: userError } = await supabase.auth.getUser();
 
-    // // Log what we found
-    // console.log('User object:', user);
-    // if (userError) {
-    //   console.error('Error getting user:', userError);
-    // }
+    if(!user){
+      return console.log("Error! No user found")
+    }
+
+    const {data: existing} = await supabase
+      .from('grocery_items')
+      .select('*')
+      .eq('name', itemName)
+      .eq('user_id', user.id)
+      .single()
     
-    if (user) {
-      console.log('Attempting to insert with user ID:', user.id);
+    if(existing){
       const { data, error } = await supabase
+        .from('grocery_items')
+        .update({quantity: existing.quantity + 1})
+        .eq('id', existing.id)
+        .select();
+      
+      if (error){
+        console.error('Error adding item:', error);
+      }
+
+      else{
+        setGroceries(
+          prev => prev.map(i => i.id === existing.id ? data[0] : i)
+        );
+      }
+    }
+
+    else{
+      const{data, error} = await supabase
         .from('grocery_items')
         .insert([
           { 
-            name: 'New Item', 
+            name: itemName, 
             quantity: 1, 
             unit: 'pcs',
             user_id: user.id 
           }
         ])
         .select();
-      
-      if (error) {
-        // This is the error you are currently seeing
-        console.error('Error adding item:', error); 
-      } else {
-        console.log('Successfully added item:', data);
-        setGroceries(prevGroceries => [...prevGroceries, ...data]);
-      }
-    } else {
-      console.log('No user was found. Insert operation cancelled.');
-    }
+
+        if(error){
+          console.error('Error adding item:', error);
+        }
+        else{
+          setGroceries(prev => [...prev, ...data]);
+        }
+    };
   }
 
     const handleDeleteItem = async () => {
@@ -71,36 +91,53 @@ export default function GroceriesPage() {
 
     // // Get the current user session
     const { data: { user }, error: userError } = await supabase.auth.getUser();
-
-    // // Log what we found
-    // console.log('User object:', user);
-    // if (userError) {
-    //   console.error('Error getting user:', userError);
-    // }
     
-    if (user) {
-      console.log('Attempting to insert with user ID:', user.id);
+    if(!user){
+      return console.log("Error! No user found")
+    }
+
+    const {data: existing} = await supabase
+      .from('grocery_items')
+      .select('*')
+      .eq('name', itemName)
+      .eq('user_id', user.id)
+      .single()
+
+    if(!existing){
+      console.log("Item does not exist");
+      return;
+    }
+
+    if(existing.quantity <= 1){
+      const{error} = await supabase
+        .from('grocery_items')
+        .delete()
+        .eq('id', existing.id)
+
+      if(error){
+        console.error("Error adding item:", error);
+      }
+      else{
+        setGroceries(prev => prev.filter(i => i.id !== existing.id));
+      }
+    }
+
+    else{
       const { data, error } = await supabase
         .from('grocery_items')
-        .insert([
-          { 
-            name: 'New Item', 
-            quantity: 1, 
-            unit: 'pcs',
-            user_id: user.id 
-          }
-        ])
+        .update({quantity: existing.quantity - 1})
+        .eq('id', existing.id)
         .select();
       
-      if (error) {
-        // This is the error you are currently seeing
-        console.error('Error adding item:', error); 
-      } else {
-        console.log('Successfully added item:', data);
-        setGroceries(prevGroceries => [...prevGroceries, ...data]);
+      if(error){
+        console.error("Error decrementing item:", error);
       }
-    } else {
-      console.log('No user was found. Insert operation cancelled.');
+
+      else{
+        setGroceries(
+          prev => prev.map(i => i.id === existing.id ? data[0] : i)
+        );
+      }
     }
   }
 
@@ -108,7 +145,15 @@ export default function GroceriesPage() {
   return (
     <div>
       <h1>My Groceries</h1>
-      <button onClick={handleAddItem}>Add New Item</button>
+      <input
+        type="text"
+        id="name"
+        value={itemName}
+        onChange={(e) => setItemName(e.target.value)}
+        placeholder="Type item..."
+      />
+      <button style={{ backgroundColor: 'green', color: 'white', border: 'none', padding: '10px 20px', cursor: 'pointer' }} onClick={handleAddItem}>Add Item</button>
+      <button style={{ backgroundColor: 'red', color: 'white', border: 'none', padding: '10px 20px', cursor: 'pointer' }} onClick={handleDeleteItem}>Delete Item</button>
       <ul>
         {groceries.map((item) => (
           <li key={item.id}>{item.name} - {item.quantity} {item.unit}</li>
